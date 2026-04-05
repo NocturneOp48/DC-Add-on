@@ -1,0 +1,418 @@
+/* ================================================================
+   DC Add-on — shadcn/ui inspired design system
+   ================================================================ */
+
+/* === Design tokens === */
+:root {
+  --dc-bg: #ffffff;
+  --dc-fg: #0a0a0a;
+  --dc-muted: #f4f4f5;
+  --dc-muted-fg: #71717a;
+  --dc-border: #e4e4e7;
+  --dc-input: #e4e4e7;
+  --dc-ring: #18181b;
+  --dc-primary: #18181b;
+  --dc-primary-fg: #fafafa;
+  --dc-secondary: #f4f4f5;
+  --dc-secondary-fg: #18181b;
+  --dc-destructive: #ef4444;
+  --dc-destructive-fg: #fafafa;
+  --dc-accent: #f4f4f5;
+  --dc-accent-fg: #18181b;
+  --dc-radius: 6px;
+  --dc-font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Nanum Gothic", sans-serif;
+}
+
+
+/* === Shared overlay === */
+.dca-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: dca-fade-in 0.15s ease-out;
+}
+
+@keyframes dca-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes dca-slide-in {
+  from { opacity: 0; transform: scale(0.96) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* === Shared modal panel === */
+.dca-modal {
+  position: relative;
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 64px);
+  background: var(--dc-bg);
+  border: 1px solid var(--dc-border);
+  border-radius: 12px;
+  box-shadow: 0 16px 70px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: dca-slide-in 0.2s ease-out;
+  font-family: var(--dc-font);
+}
+
+.dca-modal-header {
+  padding: 24px 24px 0;
+}
+
+.dca-modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--dc-fg);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.dca-modal-desc {
+  font-size: 13px;
+  color: var(--dc-muted-fg);
+  margin: 4px 0 0;
+}
+
+.dca-modal-body {
+  padding: 16px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.dca-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 24px;
+  border-top: 1px solid var(--dc-border);
+}
+
+/* === Buttons === */
+.dca-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--dc-radius);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--dc-font);
+  line-height: 1;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.dca-btn-primary {
+  background: var(--dc-primary);
+  color: var(--dc-primary-fg);
+  border-color: var(--dc-primary);
+}
+.dca-btn-primary:hover {
+  opacity: 0.9;
+}
+
+.dca-btn-secondary {
+  background: var(--dc-secondary);
+  color: var(--dc-secondary-fg);
+  border-color: var(--dc-border);
+}
+.dca-btn-secondary:hover {
+  background: var(--dc-muted);
+}
+
+.dca-btn-destructive {
+  background: var(--dc-destructive);
+  color: var(--dc-destructive-fg);
+}
+.dca-btn-destructive:hover {
+  opacity: 0.9;
+}
+
+.dca-btn-ghost {
+  background: transparent;
+  color: var(--dc-fg);
+}
+.dca-btn-ghost:hover {
+  background: var(--dc-accent);
+}
+
+.dca-btn-sm {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+/* === Textarea === */
+.dca-textarea {
+  width: 100%;
+  min-height: 280px;
+  padding: 10px 12px;
+  border: 1px solid var(--dc-input);
+  border-radius: var(--dc-radius);
+  background: var(--dc-bg);
+  color: var(--dc-fg);
+  font-size: 13px;
+  font-family: "SF Mono", "Cascadia Code", "Nanum Gothic Coding", monospace;
+  line-height: 1.6;
+  resize: vertical;
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.dca-textarea:focus {
+  border-color: var(--dc-ring);
+  box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.1);
+}
+
+/* === Input === */
+.dca-input {
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--dc-input);
+  border-radius: var(--dc-radius);
+  background: var(--dc-bg);
+  color: var(--dc-fg);
+  font-size: 13px;
+  font-family: var(--dc-font);
+  outline: none;
+  transition: border-color 0.15s;
+  box-sizing: border-box;
+}
+.dca-input:focus {
+  border-color: var(--dc-ring);
+  box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.1);
+}
+
+/* === Badge / chip (user items in random pick) === */
+.dca-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--dc-border);
+  border-radius: 9999px;
+  background: var(--dc-bg);
+  color: var(--dc-fg);
+  font-size: 12px;
+  font-family: var(--dc-font);
+  margin: 3px;
+  cursor: default;
+  transition: background 0.15s, border-color 0.15s;
+}
+.dca-badge:hover {
+  background: var(--dc-muted);
+}
+.dca-badge .dca-badge-x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--dc-muted);
+  color: var(--dc-muted-fg);
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  line-height: 1;
+}
+.dca-badge .dca-badge-x:hover {
+  background: var(--dc-destructive);
+  color: var(--dc-destructive-fg);
+}
+
+/* === Random pick: result === */
+.dca-result {
+  margin: 16px 0;
+  padding: 20px;
+  border-radius: 8px;
+  background: var(--dc-muted);
+  text-align: center;
+}
+.dca-result-label {
+  font-size: 12px;
+  color: var(--dc-muted-fg);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+.dca-result-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--dc-fg);
+}
+
+/* === Random pick: input row === */
+.dca-input-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.dca-input-row .dca-input {
+  flex: 1;
+}
+
+/* === Badge container === */
+.dca-badge-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 16px;
+  min-height: 36px;
+  padding: 8px;
+  border: 1px solid var(--dc-border);
+  border-radius: var(--dc-radius);
+  background: var(--dc-muted);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.dca-badge-container:empty::after {
+  content: "참가자를 추가하세요";
+  color: var(--dc-muted-fg);
+  font-size: 13px;
+}
+
+/* === Tabs (block list editor) === */
+.dca-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--dc-border);
+  margin-bottom: 16px;
+}
+
+.dca-tab {
+  padding: 8px 16px;
+  border: none;
+  background: transparent;
+  color: var(--dc-muted-fg);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--dc-font);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -1px;
+}
+.dca-tab:hover {
+  color: var(--dc-fg);
+}
+.dca-tab.active {
+  color: var(--dc-fg);
+  border-bottom-color: var(--dc-primary);
+}
+
+.dca-tab-panel {
+  display: none;
+}
+.dca-tab-panel.active {
+  display: block;
+}
+
+.dca-tab-desc {
+  font-size: 12px;
+  color: var(--dc-muted-fg);
+  margin: 0 0 10px;
+}
+
+.dca-tab-textarea {
+  min-height: 200px;
+}
+
+/* === Carrier preset buttons === */
+.dca-carrier-btns {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+.dca-carrier-label {
+  font-size: 12px;
+  color: var(--dc-muted-fg);
+  margin-right: 2px;
+}
+
+/* === Direct memo box === */
+.directMemobox {
+  width: 620px !important;
+}
+
+/* === Direct View dialog === */
+#dcs_dialog {
+  top: 100%;
+  left: 0;
+  opacity: 0;
+  width: 840px;
+  overflow-y: visible;
+  background: white;
+  z-index: 999;
+}
+
+#dcs_dialog .btn_recommend_box { display: none; }
+#dcs_dialog .cmt_info { overflow: hidden; }
+#dcs_dialog .cmt_write_box > .fl { width: 15%; }
+#dcs_dialog .cmt_list .fr { width: 106px; }
+#dcs_dialog .cmt_txtbox { width: 60%; }
+#dcs_dialog .cmt_txtbox p { width: 500px; }
+#dcs_dialog .reply .cmt_write_box.small .cmt_txt_cont textarea { width: 600px; }
+#dcs_dialog #div_con .off { display: none; }
+
+#dcs_dialog::-webkit-scrollbar-track {
+  border-radius: 10px;
+  background-color: #f5f5f5;
+}
+#dcs_dialog::-webkit-scrollbar {
+  width: 8px;
+  background-color: #fff;
+}
+#dcs_dialog::-webkit-scrollbar-thumb {
+  border-radius: 10px;
+  background-color: #c0c0c0;
+}
+
+/* === Remove bottom ads (except kakao player) === */
+.gallview_contents iframe { display: none; }
+.gallview_contents iframe[src^="http"] { display: block; }
+.gallview_contents .con_banner { display: none !important; }
+
+/* === Spinner === */
+.spinner {
+  animation: rotate 2s linear infinite;
+  position: relative;
+  z-index: 16;
+  width: 25px;
+  height: 25px;
+}
+.spinner .path {
+  stroke: var(--dc-muted-fg);
+  stroke-linecap: round;
+  animation: dash 1.5s ease-in-out infinite;
+}
+
+@keyframes rotate {
+  100% { transform: rotate(360deg); }
+}
+@keyframes dash {
+  0% { stroke-dasharray: 1, 150; stroke-dashoffset: 0; }
+  50% { stroke-dasharray: 90, 150; stroke-dashoffset: -35; }
+  100% { stroke-dasharray: 90, 150; stroke-dashoffset: -124; }
+}
+
+/* === Comment list fix === */
+ul.cmt_list.add li:first-child {
+  display: inline-block;
+  text-align: left;
+  width: 100%;
+}

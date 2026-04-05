@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "dc add-on",
+  "version": "3.0.0",
+  "description": "갤질용 편의기능 제공",
+  "action": {
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    },
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://gall.dcinside.com/*"],
+      "css": ["content_scripts.css"],
+      "js": ["dom.js", "content_scripts.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://gall.dcinside.com/*"],
+      "js": ["page_bridge.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ],
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://gall.dcinside.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icon.png", "icon16.png", "icon48.png", "icon128.png"],
+      "matches": ["https://gall.dcinside.com/*"]
+    }
+  ]
+}
