@@ -387,12 +387,20 @@ function extractComments(html) {
   return m ? m[0] : null;
 }
 
-function closeDialog() {
+function closeDialog(skipScroll) {
   const dialog = $("#dcs_dialog");
   const pos = $("#dlg_position");
+  // Find the post row that was being viewed (right before dlg_position)
+  const viewedRow = pos ? pos.previousElementSibling : null;
   if (dialog) $.remove(dialog);
   if (pos) $.remove(pos);
   stopCommentRefresh();
+  // Scroll so the viewed post sits at ~30% from top of viewport (only when closing without opening another)
+  if (!skipScroll && viewedRow) {
+    const rect = viewedRow.getBoundingClientRect();
+    const target = window.scrollY + rect.top - window.innerHeight * 0.3;
+    window.scrollTo({ top: target, behavior: "smooth" });
+  }
 }
 
 function initDirectView() {
@@ -412,9 +420,10 @@ function initDirectView() {
         return;
       }
 
-      closeDialog();
+      closeDialog(true);
 
       const postRow = link.closest(".us-post");
+
       const posRow = $.el(`<tr id="dlg_position"></tr>`);
       $.after(postRow, posRow);
 
@@ -435,6 +444,7 @@ function initDirectView() {
 
         if (postHtml) dialog.appendChild($.el(postHtml));
 
+        postRow.scrollIntoView({ block: "start" });
         $.animate({ top: "0px", opacity: "1" }, dialog);
 
         const hrefUrl = new URL(href, location.origin);
@@ -910,7 +920,7 @@ function initGallReload() {
     e.preventDefault();
     e.stopPropagation();
 
-    closeDialog();
+    closeDialog(true);
 
     const fl = $(".page_head > .fl");
     if (fl) fl.appendChild($.el(loadingHTML));

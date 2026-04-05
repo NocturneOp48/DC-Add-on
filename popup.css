@@ -117,6 +117,18 @@ body {
   transform: translateX(16px);
 }
 
+/* Hint text (e.g. under dview toggle) */
+.popup-hint {
+  padding: 0 12px 6px 38px;
+  font-size: 11px;
+  color: var(--dc-muted-fg);
+  line-height: 1.4;
+  display: none;
+}
+.popup-hint.visible {
+  display: block;
+}
+
 /* Sub-option row (e.g. refresh interval) */
 .popup-sub {
   display: flex;

@@ -8,13 +8,19 @@
 const toggleDView = document.getElementById("toggle-dview");
 const toggleAutoRefresh = document.getElementById("toggle-autorefresh");
 const refreshInterval = document.getElementById("refresh-interval");
+const dviewHint = document.getElementById("dview-hint");
 const actionBtns = document.querySelectorAll(".popup-action");
+
+function updateDviewHint() {
+  dviewHint.classList.toggle("visible", toggleDView.checked);
+}
 
 // Load saved state
 chrome.storage.local.get(["dViewMode", "autoRefreshMode", "refreshInterval"], (data) => {
   toggleDView.checked = !!data.dViewMode;
   toggleAutoRefresh.checked = !!data.autoRefreshMode;
   if (data.refreshInterval) refreshInterval.value = String(data.refreshInterval);
+  updateDviewHint();
 });
 
 // Disable actions if not on DC Inside
@@ -30,6 +36,7 @@ chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
 // Toggle handlers
 toggleDView.addEventListener("change", () => {
   chrome.storage.local.set({ dViewMode: toggleDView.checked });
+  updateDviewHint();
 });
 
 toggleAutoRefresh.addEventListener("change", () => {
