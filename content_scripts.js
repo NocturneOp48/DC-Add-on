@@ -1075,17 +1075,32 @@ async function doAutoRefresh() {
         const existingRow = existingMap.get(no);
         const oldReply = existingRow.querySelector(".reply_num");
         const newReply = row.querySelector(".reply_num");
-        if (oldReply && newReply && oldReply.textContent !== newReply.textContent) {
-          oldReply.textContent = newReply.textContent;
+        const oldText = oldReply ? oldReply.textContent : "";
+        const newText = newReply ? newReply.textContent : "";
+        if (oldText !== newText && newText) {
+          if (oldReply) {
+            // Update existing reply count
+            oldReply.textContent = newText;
+          } else {
+            // No reply_num existed — insert the new one from fetched row
+            const oldTit = existingRow.querySelector(".gall_tit");
+            const newTit = row.querySelector(".gall_tit");
+            if (oldTit && newTit) {
+              oldTit.innerHTML = newTit.innerHTML;
+            }
+          }
           // Highlight comment count change (light blue)
-          oldReply.style.backgroundColor = "rgba(59, 130, 246, 0.15)";
-          oldReply.style.borderRadius = "4px";
-          oldReply.style.transition = "background-color 5s ease";
-          requestAnimationFrame(() => {
+          const highlight = existingRow.querySelector(".reply_num");
+          if (highlight) {
+            highlight.style.backgroundColor = "rgba(59, 130, 246, 0.15)";
+            highlight.style.borderRadius = "4px";
+            highlight.style.transition = "background-color 5s ease";
             requestAnimationFrame(() => {
-              oldReply.style.backgroundColor = "";
+              requestAnimationFrame(() => {
+                highlight.style.backgroundColor = "";
+              });
             });
-          });
+          }
         }
       }
     }
