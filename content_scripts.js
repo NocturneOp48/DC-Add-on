@@ -691,24 +691,36 @@ function stopAutoRefresh() {
   }
 }
 
+async function fetchWithRetry(url, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await $.get(url);
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  }
+}
+
 async function doAutoRefresh() {
   const gallList = $(".gall_list tbody");
   if (!gallList) return;
 
   const isNotice = (row) => row.dataset.type === "icon_notice";
 
-  const existingNos = new Set();
+  // Map existing posts: no → row element
+  const existingMap = new Map();
   for (const row of $.all(".gall_list .ub-content.us-post")) {
     if (isNotice(row)) continue;
     const no = row.dataset.no;
-    if (no) existingNos.add(no);
+    if (no) existingMap.set(no, row);
   }
 
   // Build fetch URL reflecting current list mode (개념글, 말머리 탭, etc.)
   const fetchUrl = getCurrentListUrl();
 
   try {
-    const html = await $.get(fetchUrl);
+    const html = await fetchWithRetry(fetchUrl);
     const tpl = document.createElement("template");
     tpl.innerHTML = html;
     const fetchedRows = tpl.content.querySelectorAll(".gall_list .ub-content.us-post");
@@ -717,31 +729,52 @@ async function doAutoRefresh() {
     for (const row of fetchedRows) {
       if (isNotice(row)) continue;
       const no = row.dataset.no;
-      if (no && !existingNos.has(no)) {
+      if (!no) continue;
+
+      if (!existingMap.has(no)) {
+        // New post
         newRows.push(row);
+      } else {
+        // Existing post — check for comment count change
+        const existingRow = existingMap.get(no);
+        const oldReply = existingRow.querySelector(".reply_num");
+        const newReply = row.querySelector(".reply_num");
+        if (oldReply && newReply && oldReply.textContent !== newReply.textContent) {
+          oldReply.textContent = newReply.textContent;
+          // Highlight comment count change (light blue)
+          oldReply.style.backgroundColor = "rgba(59, 130, 246, 0.15)";
+          oldReply.style.borderRadius = "4px";
+          oldReply.style.transition = "background-color 5s ease";
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              oldReply.style.backgroundColor = "";
+            });
+          });
+        }
       }
     }
 
-    if (newRows.length === 0) return;
-
-    let insertBefore = null;
-    for (const row of gallList.querySelectorAll(".ub-content.us-post")) {
-      if (!isNotice(row)) {
-        insertBefore = row;
-        break;
+    // Insert new rows
+    if (newRows.length > 0) {
+      let insertBefore = null;
+      for (const row of gallList.querySelectorAll(".ub-content.us-post")) {
+        if (!isNotice(row)) {
+          insertBefore = row;
+          break;
+        }
       }
-    }
-    if (!insertBefore) return;
-
-    for (const row of newRows.reverse()) {
-      row.style.backgroundColor = "var(--dc-muted, #f4f4f5)";
-      row.style.transition = "background-color 5s ease";
-      gallList.insertBefore(row, insertBefore);
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          row.style.backgroundColor = "";
-        });
-      });
+      if (insertBefore) {
+        for (const row of newRows.reverse()) {
+          row.style.backgroundColor = "var(--dc-muted, #f4f4f5)";
+          row.style.transition = "background-color 5s ease";
+          gallList.insertBefore(row, insertBefore);
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              row.style.backgroundColor = "";
+            });
+          });
+        }
+      }
     }
 
     filterPosts();
