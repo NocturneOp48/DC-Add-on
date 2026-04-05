@@ -1,6 +1,7 @@
 /**
  * Runs in the MAIN world (page context).
  * Loads comment.js if needed, sets jQuery data, then calls viewComments.
+ * Also initializes kcaptcha for non-logged-in captcha in direct view.
  */
 document.addEventListener("__dc_addon_viewComments", (e) => {
   const detail = e.detail || {};

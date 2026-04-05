@@ -392,6 +392,7 @@ function closeDialog() {
   const pos = $("#dlg_position");
   if (dialog) $.remove(dialog);
   if (pos) $.remove(pos);
+  stopCommentRefresh();
 }
 
 function initDirectView() {
@@ -445,6 +446,28 @@ function initDirectView() {
           const esnoEl = document.getElementById("e_s_n_o");
           if (esnoEl) esnoEl.value = esnoMatch[1];
         }
+
+        // Extract hidden inputs needed for captcha (non-logged-in users)
+        const kcaptchaMatch = html.match(/id="kcaptcha_use"[^>]*value="([^"]*)"/);
+        if (kcaptchaMatch) {
+          let kcEl = document.getElementById("kcaptcha_use");
+          if (!kcEl) {
+            kcEl = document.createElement("input");
+            kcEl.type = "hidden";
+            kcEl.id = "kcaptcha_use";
+            document.body.appendChild(kcEl);
+          }
+          kcEl.value = kcaptchaMatch[1];
+        }
+
+        // Ensure #id input exists (needed by kcaptcha.js)
+        if (!document.getElementById("id")) {
+          const idInput = document.createElement("input");
+          idInput.type = "hidden";
+          idInput.id = "id";
+          idInput.value = galleryId;
+          document.body.appendChild(idInput);
+        }
         const triggerViewComments = () => {
           document.dispatchEvent(new CustomEvent("__dc_addon_viewComments", {
             detail: { gallery_id: galleryId, no: articleNo }
@@ -453,62 +476,120 @@ function initDirectView() {
 
         if (cmtHtml) dialog.appendChild($.el(cmtHtml));
 
-        setTimeout(() => {
-          const iframe = $.el(
-            `<iframe id="dcs_iframe" style="display:none" src="${href}"></iframe>`
-          );
-          dialog.appendChild(iframe);
-        }, 1000);
+        // Load iframe for comment submission (uses server-issued tokens)
+        const iframe = $.el(
+          `<iframe id="dcs_iframe" style="display:none" src="${href}"></iframe>`
+        );
+        iframe.addEventListener("load", () => {
+          try {
+            const iframeBody = iframe.contentDocument.body;
+            // Sync captcha image from iframe to dialog (same cookie session)
+            const iframeCaptcha = iframeBody.querySelector("img.kcaptcha[data-type='comment']");
+            const dialogCaptcha = $.find("img.kcaptcha[data-type='comment']", dialog);
+            if (iframeCaptcha && dialogCaptcha) {
+              const syncCaptcha = () => {
+                if (iframeCaptcha.src && !iframeCaptcha.src.includes("kcap_none")) {
+                  dialogCaptcha.src = iframeCaptcha.src;
+                } else {
+                  setTimeout(syncCaptcha, 300);
+                }
+              };
+              setTimeout(syncCaptcha, 200);
 
+              // Bug fix 1: captcha click refresh
+              dialogCaptcha.style.cursor = "pointer";
+              dialogCaptcha.addEventListener("click", () => {
+                iframeCaptcha.click();
+                setTimeout(() => {
+                  dialogCaptcha.src = iframeCaptcha.src;
+                }, 300);
+              });
+            }
+
+            // Bug fix 2: restore saved password from localStorage
+            const savedPw = localStorage.getItem("nonmember_pw");
+            if (savedPw) {
+              const pwInput = $.find("input[name='password']", dialog);
+              if (pwInput && !pwInput.value) pwInput.value = savedPw;
+            }
+          } catch { /* cross-origin */ }
+        });
+        dialog.appendChild(iframe);
+
+        // Replace submit button to use iframe-based submission
         const replyBtn = $.find(".repley_add", dialog);
         if (replyBtn) {
-          replyBtn.classList.remove("btn_blue", "btn_svc", "small", "repley_add");
-          replyBtn.classList.add("btn_blue", "small", "dcs_replyButton");
+          replyBtn.classList.remove("repley_add");
+          replyBtn.classList.add("dcs_replyButton");
+          replyBtn.addEventListener("click", () => commentViaIframe(dialog));
+        }
+        const replyBtnVote = $.find(".repley_add_vote", dialog);
+        if (replyBtnVote) {
+          replyBtnVote.classList.remove("repley_add_vote");
+          replyBtnVote.classList.add("dcs_replyButtonVote");
+          replyBtnVote.addEventListener("click", () => commentViaIframe(dialog));
         }
 
-        const memo = $.find('textarea[id^="memo"]', dialog);
-        if (memo) memo.classList.add("directMemobox");
+        // Bug fix 3: Enter key submits comment
+        const memoBox = $.find("textarea[id^='memo']", dialog);
+        if (memoBox) {
+          memoBox.addEventListener("keydown", (e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              commentViaIframe(dialog);
+            }
+          });
+        }
+
+        // Dccon button: click iframe's .tx_dccon, show iframe as overlay
+        // with only #div_con visible, so all dccon.js interactions work natively
+        $.delegate(dialog, "click", ".tx_dccon", (e, target) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const iframeEl = dialog.querySelector("#dcs_iframe");
+          if (!iframeEl || !iframeEl.contentDocument) return;
+
+          // If iframe overlay is already showing, toggle it off
+          if (iframeEl.dataset.dcconVisible === "1") {
+            hideDcconOverlay(iframeEl);
+            startCommentRefresh();
+            return;
+          }
+
+          // Stop auto-refresh while dccon overlay is open (prevents captcha invalidation)
+          stopCommentRefresh();
+
+          try {
+            const iframeDoc = iframeEl.contentDocument;
+            // Click matching .tx_dccon in iframe to trigger dccon.js
+            const dataNo = target.getAttribute("data-no");
+            const iframeBtn = dataNo
+              ? iframeDoc.body.querySelector(".tx_dccon[data-no='" + dataNo + "']")
+              : iframeDoc.body.querySelector(".tx_dccon");
+            if (iframeBtn) iframeBtn.click();
+
+            // Wait for #div_con to become visible, then show iframe overlay
+            const waitForDccon = (attempts) => {
+              if (attempts <= 0) return;
+              const iframeDivCon = iframeDoc.getElementById("div_con");
+              if (!iframeDivCon || iframeDivCon.style.display === "none") {
+                setTimeout(() => waitForDccon(attempts - 1), 200);
+                return;
+              }
+              showDcconOverlay(iframeEl, iframeDivCon, target);
+            };
+            setTimeout(() => waitForDccon(15), 300);
+          } catch { /* cross-origin */ }
+        });
 
         triggerViewComments();
+        startCommentRefresh();
 
         for (const img of $.findAll("img[data-original]", dialog)) {
           img.src = img.getAttribute("data-original");
         }
 
         setTimeout(filterPosts, 300);
-
-        const memoBox = $.find("textarea.directMemobox", dialog);
-        if (memoBox) {
-          memoBox.addEventListener("keydown", (e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              const btn = $.find(".dcs_replyButton", dialog);
-              if (btn) btn.click();
-            }
-          });
-        }
-
-        $.delegate(dialog, "click", ".tx_dccon", () => {
-          const divCon = $.find("#div_con", dialog);
-          if (divCon) {
-            divCon.classList.toggle("off");
-          } else {
-            const iframe = $.find("#dcs_iframe", dialog);
-            if (iframe && iframe.contentDocument) {
-              const iframeCon = iframe.contentDocument.body.querySelector("#div_con");
-              if (iframeCon) {
-                const dcconBox = $.find(".dccon_guidebox", dialog);
-                if (dcconBox) dcconBox.appendChild(iframeCon);
-              }
-            }
-          }
-        });
-
-        const dcsReplyBtn = $.find(".dcs_replyButton", dialog);
-        if (dcsReplyBtn) {
-          dcsReplyBtn.addEventListener("click", () => {
-            commentViaIframe(dialog);
-          });
-        }
       } catch (err) {
         console.error("[dc add-on] Direct view load failed:", err);
       }
@@ -532,60 +613,271 @@ function initDirectView() {
   }
 }
 
+/* ================================================================
+   Dccon overlay helpers (direct view)
+   Show iframe as a positioned overlay displaying only #div_con
+   ================================================================ */
+
+function showDcconOverlay(iframeEl, iframeDivCon, triggerBtn) {
+  const iframeDoc = iframeEl.contentDocument;
+  const iframeBody = iframeDoc.body;
+  const dialog = triggerBtn.closest("#dcs_dialog");
+
+  // Move #div_con to body root so we can hide everything else
+  iframeBody.appendChild(iframeDivCon);
+
+  let dcconStyle = iframeDoc.getElementById("dcs_dccon_style");
+  if (!dcconStyle) {
+    dcconStyle = iframeDoc.createElement("style");
+    dcconStyle.id = "dcs_dccon_style";
+    iframeDoc.head.appendChild(dcconStyle);
+  }
+  dcconStyle.textContent = [
+    "html, body { margin: 0 !important; padding: 0 !important; overflow: hidden !important; }",
+    "body > *:not(#div_con) { display: none !important; }",
+    "#div_con { display: block !important; position: static !important; }",
+  ].join("\n");
+
+  // Calculate position relative to dialog
+  const btnRect = triggerBtn.getBoundingClientRect();
+  const dialogRect = dialog.getBoundingClientRect();
+  const offsetTop = btnRect.bottom - dialogRect.top;
+
+  iframeEl.style.display = "block";
+  iframeEl.style.position = "absolute";
+  iframeEl.style.left = "0px";
+  iframeEl.style.top = offsetTop + "px";
+  iframeEl.style.width = "840px";
+  iframeEl.style.border = "1px solid #ccc";
+  iframeEl.style.borderRadius = "4px";
+  iframeEl.style.zIndex = "999";
+  iframeEl.style.background = "#fff";
+  iframeEl.style.boxShadow = "0 4px 16px rgba(0,0,0,0.15)";
+  iframeEl.scrolling = "no";
+  iframeEl.dataset.dcconVisible = "1";
+  iframeEl.contentWindow.scrollTo(0, 0);
+
+  // Sync dialog inputs → iframe so dccon.js can read name/pw/code
+  const syncInputs = () => {
+    try {
+      const textArea = dialog.querySelector("textarea[id^='memo']");
+      const no = textArea ? textArea.id.replace("memo_", "") : "";
+      if (!no) return;
+      const fields = [
+        ["#name_" + no, "input[name='name']"],
+        ["#password_" + no, "input[name='password']"],
+        ["#code_" + no, "#code_" + no],
+        ["#gall_nick_name_" + no, "input[name='gall_nick_name']"],
+      ];
+      for (const [iframeSel, dialogSel] of fields) {
+        const iframeInput = iframeDoc.querySelector(iframeSel);
+        const dialogInput = dialog.querySelector(dialogSel);
+        if (iframeInput && dialogInput) {
+          iframeInput.value = dialogInput.value;
+        }
+      }
+      const iframeUGN = iframeDoc.querySelector("#use_gall_nick");
+      const dialogUGN = dialog.querySelector("#use_gall_nick") || document.querySelector("#use_gall_nick");
+      if (iframeUGN && dialogUGN) iframeUGN.value = dialogUGN.value;
+    } catch {}
+  };
+
+  // Size iframe to match #div_con height, keep #div_con at body root
+  const fitToContent = () => {
+    try {
+      if (iframeDivCon.parentElement !== iframeBody) {
+        iframeBody.appendChild(iframeDivCon);
+      }
+      iframeEl.contentWindow.scrollTo(0, 0);
+      const h = iframeDivCon.offsetHeight;
+      if (h > 0) iframeEl.style.height = h + "px";
+      syncInputs();
+    } catch {}
+  };
+  fitToContent();
+  setTimeout(fitToContent, 200);
+  setTimeout(fitToContent, 600);
+
+  // Intercept dccon.js's insert_icon AJAX call:
+  // dccon.js moves #div_con to body, breaking .parents('.dccon_guidebox') traversal.
+  // We hook iframe's jQuery.ajax so that when dccon.js POSTs to /dccon/insert_icon,
+  // we cancel it and re-submit from the parent page with correct data.
+  hookDcconAjax(iframeEl);
+
+  // Sync inputs right before dccon.js handles .img_dccon click (capture phase)
+  iframeDivCon.addEventListener("click", (evt) => {
+    if (evt.target.closest(".img_dccon")) syncInputs();
+  }, true);
+
+  // Re-fit when dccon.js changes content (tab switch, pagination, AJAX load)
+  const resizeObs = new MutationObserver(() => setTimeout(fitToContent, 50));
+  resizeObs.observe(iframeBody, { childList: true, subtree: true, attributes: true });
+
+  // Watch for dccon.js hiding #div_con (icon selected or closed)
+  const styleObs = new MutationObserver(() => {
+    try {
+      if (iframeDivCon.style.display === "none") {
+        styleObs.disconnect();
+        resizeObs.disconnect();
+        hideDcconOverlay(iframeEl);
+        startCommentRefresh();
+        setTimeout(() => {
+          document.dispatchEvent(new CustomEvent("__dc_addon_viewComments", {
+            detail: { refreshOnly: true }
+          }));
+          setTimeout(filterComments, 500);
+        }, 500);
+      }
+    } catch {
+      styleObs.disconnect();
+      resizeObs.disconnect();
+    }
+  });
+  styleObs.observe(iframeDivCon, { attributes: true, attributeFilter: ["style"] });
+}
+
+/**
+ * Hook iframe's jQuery.ajax to intercept dccon insert_icon calls.
+ * dccon.js's own AJAX fails with "fail2" because moving #div_con to body
+ * breaks DOM context. Instead, we let dccon.js build the formData (which
+ * reads tokens from iframe DOM), but intercept the actual AJAX call and
+ * re-submit it from the parent context.
+ */
+function hookDcconAjax(iframeEl) {
+  try {
+    const iframeWin = iframeEl.contentWindow;
+    const iframe$ = iframeWin.jQuery || iframeWin.$;
+    if (!iframe$ || iframe$._dcaHooked) return;
+    iframe$._dcaHooked = true;
+
+    const origAjax = iframe$.ajax;
+    iframe$.ajax = function (opts) {
+      // Only intercept dccon insert_icon calls
+      if (opts && opts.url && opts.url.indexOf("/dccon/insert_icon") !== -1) {
+        // dccon.js built formData from iframe DOM — just forward it as-is
+        // but send from parent page context (same origin, same cookies)
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "https://" + location.host + "/dccon/insert_icon", true);
+        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+        xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+        xhr.onload = function () {
+          if (opts.success) opts.success(xhr.responseText);
+        };
+        xhr.onerror = function () {
+          if (opts.error) opts.error();
+        };
+        xhr.send(opts.data);
+        return xhr;
+      }
+      return origAjax.apply(this, arguments);
+    };
+  } catch {}
+}
+
+function hideDcconOverlay(iframeEl) {
+  iframeEl.style.display = "none";
+  iframeEl.dataset.dcconVisible = "0";
+  try {
+    const doc = iframeEl.contentDocument;
+    const s = doc.getElementById("dcs_dccon_style");
+    if (s) s.textContent = "";
+  } catch {}
+}
+
 function commentViaIframe(dialog) {
   const iframe = $.find("#dcs_iframe", dialog);
   if (!iframe || !iframe.contentDocument) return;
 
   const iframeBody = iframe.contentDocument.body;
-  const nameInput = $.find("input[id^='name']", dialog);
-  const pwInput = $.find("input[id^='password']", dialog);
-  const textArea = $.find("textarea.directMemobox", dialog);
-  if (!textArea) return;
+  const textArea = $.find("textarea[id^='memo']", dialog);
+  if (!textArea || !textArea.value.trim()) return;
 
-  const text = textArea.value;
+  // Transfer values to iframe inputs
+  const no = textArea.id.replace("memo_", "");
 
-  if (pwInput) {
-    const iframeName = iframeBody.querySelector("input[id^='name']");
-    const iframePw = iframeBody.querySelector("input[id^='password']");
-    if (iframeName && nameInput) iframeName.value = nameInput.value;
-    if (iframePw) iframePw.value = pwInput.value;
-  }
+  // Nickname (갤닉네임 or regular)
+  const gallNick = $.find("input[name='gall_nick_name']", dialog);
+  const nameInput = $.find("input[name='name']", dialog);
+  const pwInput = $.find("input[name='password']", dialog);
+  const codeInput = document.getElementById("code_" + no);
 
-  const iframeTextarea = iframeBody.querySelector(".cmt_write_box textarea");
-  if (iframeTextarea) {
-    iframeTextarea.focus();
-    iframeTextarea.value = text;
-  }
+  const iGallNick = iframeBody.querySelector("input[name='gall_nick_name']");
+  const iName = iframeBody.querySelector("input[name='name']");
+  const iPw = iframeBody.querySelector("input[name='password']");
+  const iCode = iframeBody.querySelector("#code_" + no);
+  const iMemo = iframeBody.querySelector("#memo_" + no);
+  const iUseGallNick = iframeBody.querySelector("#use_gall_nick");
 
-  const countBtn = iframeBody.querySelector(".comment_count");
-  if (countBtn) countBtn.click();
+  // Sync use_gall_nick state
+  const useGallNick = document.getElementById("use_gall_nick");
+  if (useGallNick && iUseGallNick) iUseGallNick.value = useGallNick.value;
 
-  const submitBtn = iframeBody.querySelector(".btn_blue.btn_svc.small.repley_add");
+  if (gallNick && iGallNick) iGallNick.value = gallNick.value;
+  if (nameInput && iName) iName.value = nameInput.value;
+  if (pwInput && iPw) iPw.value = pwInput.value;
+  if (codeInput && iCode) iCode.value = codeInput.value;
+  if (iMemo) iMemo.value = textArea.value;
+
+  // Click iframe's submit button
+  const submitBtn = iframeBody.querySelector(".repley_add[data-no='" + no + "']");
   if (submitBtn) submitBtn.click();
 
-  document.dispatchEvent(new CustomEvent("__dc_addon_viewComments"));
-
-  setTimeout(filterPosts, 300);
-  textArea.value = "";
+  // Refresh comments and clear input
+  setTimeout(() => {
+    document.dispatchEvent(new CustomEvent("__dc_addon_viewComments", {
+      detail: { refreshOnly: true }
+    }));
+    textArea.value = "";
+    // Reload captcha for next comment
+    try {
+      const iframeCaptcha = iframeBody.querySelector("img.kcaptcha[data-type='comment']");
+      const dialogCaptcha = $.find("img.kcaptcha[data-type='comment']", dialog);
+      if (iframeCaptcha && dialogCaptcha) {
+        // Trigger iframe captcha reload by clicking it
+        if (iframeCaptcha.click) iframeCaptcha.click();
+        setTimeout(() => {
+          if (iframeCaptcha.src && !iframeCaptcha.src.includes("kcap_none")) {
+            dialogCaptcha.src = iframeCaptcha.src;
+          }
+        }, 500);
+      }
+    } catch {}
+    if (codeInput) codeInput.value = "";
+    setTimeout(filterComments, 500);
+  }, 1000);
 }
 
 /* ================================================================
    Feature: AJAX gallery list reload
    ================================================================ */
 
+// Remember the original list page URL (before direct view changes it)
+let savedListUrl = (() => {
+  const href = location.href;
+  if (!testURI("no", href)) return href;
+  return null;
+})();
+
 /* Helper: get the base list URL (strip mode/tab params) for gallery title reload */
 function getBaseListUrl() {
-  const url = new URL(location.href);
+  const url = new URL(savedListUrl || location.href);
   url.searchParams.delete("exception_mode");
   url.searchParams.delete("search_head");
   url.searchParams.delete("page");
+  url.searchParams.delete("no");
+  url.searchParams.delete("t");
   return url.href;
 }
 
 /* Helper: get the current list URL respecting 개념글 mode + 말머리 tab.
-   Reads from hidden inputs (DC's own state) as source of truth. */
+   Uses savedListUrl to avoid fetching a view URL during direct view. */
 function getCurrentListUrl() {
-  const url = new URL(location.href);
+  const base = savedListUrl || location.href;
+  const url = new URL(base);
+
+  // Strip view-page params that shouldn't be in list URL
+  url.searchParams.delete("no");
+  url.searchParams.delete("t");
 
   // 개념글 mode
   const exMode = document.getElementById("exception_mode");
@@ -625,6 +917,7 @@ function initGallReload() {
 
     // Always go back to normal (전체글) mode
     const targetHref = getBaseListUrl();
+    savedListUrl = targetHref;
     history.replaceState({ data: "replace" }, "title", targetHref);
 
     try {
@@ -652,6 +945,49 @@ function initGallReload() {
       if (spinner) $.remove(spinner);
     }
   });
+}
+
+/* ================================================================
+   Feature: Comment Auto Refresh (view page / direct view)
+   ================================================================ */
+
+let commentRefreshTimer = null;
+const COMMENT_REFRESH_INTERVAL = 5_000;
+
+function startCommentRefresh() {
+  stopCommentRefresh();
+  commentRefreshTimer = setInterval(doCommentRefresh, COMMENT_REFRESH_INTERVAL);
+}
+
+function stopCommentRefresh() {
+  if (commentRefreshTimer) {
+    clearInterval(commentRefreshTimer);
+    commentRefreshTimer = null;
+  }
+}
+
+function doCommentRefresh() {
+  // Find the comment container (direct view dialog or page)
+  const container = $("#dcs_dialog") || document;
+  const cmtList = container.querySelector("ul.cmt_list");
+  if (!cmtList) return;
+
+  // Skip refresh if user has inline reply form open (대댓글 입력 중)
+  if (cmtList.querySelector("#cmt_write_box")) return;
+
+  // Skip refresh if user is typing in the main comment textarea
+  const writeBox = container.querySelector(".cmt_write_box");
+  const textarea = writeBox ? writeBox.querySelector("textarea") : null;
+  if (textarea && (document.activeElement === textarea || textarea.value.trim() !== "")) return;
+
+  // Use viewComments() via page_bridge — it calls the DC API (POST /board/comment/)
+  // and replaces only .comment_box, leaving the main .cmt_write_box untouched
+  // Use refreshOnly flag to skip kcaptcha re-init
+  document.dispatchEvent(new CustomEvent("__dc_addon_viewComments", {
+    detail: { refreshOnly: true }
+  }));
+
+  setTimeout(filterComments, 500);
 }
 
 /* ================================================================
@@ -828,6 +1164,11 @@ chrome.storage.onChanged.addListener((changes) => {
     const isListPage = !testURI("no", href) && !testURI("s_type", href);
     if (isListPage) {
       setAutoRefresh(!!data.autoRefreshMode);
+    }
+
+    // Start comment auto-refresh on view pages
+    if (testURI("no", href)) {
+      startCommentRefresh();
     }
   });
 

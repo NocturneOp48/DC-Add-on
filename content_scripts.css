@@ -351,6 +351,7 @@
 
 /* === Direct View dialog === */
 #dcs_dialog {
+  position: relative;
   top: 100%;
   left: 0;
   opacity: 0;
@@ -362,12 +363,15 @@
 
 #dcs_dialog .btn_recommend_box { display: none; }
 #dcs_dialog .cmt_info { overflow: hidden; }
-#dcs_dialog .cmt_write_box > .fl { width: 15%; }
+#dcs_dialog .cmt_write_box > .fl { width: 160px; }
 #dcs_dialog .cmt_list .fr { width: 106px; }
 #dcs_dialog .cmt_txtbox { width: 60%; }
 #dcs_dialog .cmt_txtbox p { width: 500px; }
-#dcs_dialog .reply .cmt_write_box.small .cmt_txt_cont textarea { width: 600px; }
-#dcs_dialog #div_con .off { display: none; }
+#dcs_dialog .cmt_write_box .cmt_txt_cont { float: right !important; width: calc(100% - 180px) !important; }
+#dcs_dialog .cmt_write_box .cmt_txt_cont textarea { width: 100% !important; box-sizing: border-box !important; }
+#dcs_dialog .reply .cmt_write_box.small .cmt_txt_cont textarea { width: 100% !important; box-sizing: border-box !important; }
+#dcs_dialog .cmt_write_box .cmt_cont_bottm { clear: both; }
+#dcs_dialog .dccon_guidebox { position: relative; }
 
 #dcs_dialog::-webkit-scrollbar-track {
   border-radius: 10px;
