@@ -160,6 +160,78 @@ function filterComments() {
   }
 }
 
+/**
+ * Check if a single post row (.ub-content) should be blocked.
+ * Works on detached DOM nodes (before insertion).
+ */
+function isPostBlocked(row) {
+  const writer = row.querySelector(".ub-writer");
+  if (!writer) return false;
+
+  const idSet = new Set(blockData.ids);
+  const uid = writer.getAttribute("data-uid");
+  if (uid && idSet.has(uid)) return true;
+
+  const ip = writer.getAttribute("data-ip");
+  if (ip && blockData.ips.some((p) => ip.startsWith(p))) return true;
+
+  if (blockData.keywords.length > 0) {
+    const titleEl = row.querySelector(".gall_tit a");
+    const title = titleEl ? titleEl.textContent : "";
+    if (blockData.keywords.some((kw) => title.includes(kw))) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Check if a single comment (li containing .cmt_info) should be blocked.
+ * Works on detached DOM nodes (before insertion).
+ */
+function isCommentBlocked(li) {
+  const cmt = li.querySelector(".cmt_info");
+  if (!cmt) return false;
+
+  const writer = cmt.querySelector(".ub-writer");
+  if (writer) {
+    const idSet = new Set(blockData.ids);
+    const uid = writer.getAttribute("data-uid");
+    if (uid && idSet.has(uid)) return true;
+
+    const ip = writer.getAttribute("data-ip");
+    if (ip && blockData.ips.some((p) => ip.startsWith(p))) return true;
+  }
+
+  if (blockData.keywords.length > 0) {
+    const textEl = cmt.querySelector(".usertxt");
+    const text = textEl ? textEl.textContent : "";
+    if (blockData.keywords.some((kw) => text.includes(kw))) return true;
+  }
+
+  return false;
+}
+
+/**
+ * Remove blocked posts from a detached DOM container (before insertion).
+ */
+function filterPostNodes(container) {
+  blockData = loadBlockData();
+  for (const row of container.querySelectorAll(".ub-content .ub-writer")) {
+    const postRow = row.closest(".ub-content");
+    if (postRow && isPostBlocked(postRow)) postRow.remove();
+  }
+}
+
+/**
+ * Remove blocked comments from a detached DOM container (before insertion).
+ */
+function filterCommentNodes(container) {
+  blockData = loadBlockData();
+  for (const li of container.querySelectorAll("li")) {
+    if (li.querySelector(".cmt_info") && isCommentBlocked(li)) li.remove();
+  }
+}
+
 /* ================================================================
    UI: Block list editor (tabbed modal)
    ================================================================ */
@@ -442,7 +514,11 @@ function initDirectView() {
         const postHtml = extractPostContent(html);
         const cmtHtml = extractComments(html);
 
-        if (postHtml) dialog.appendChild($.el(postHtml));
+        if (postHtml) {
+          const postNode = $.el(postHtml);
+          filterPostNodes(postNode);
+          dialog.appendChild(postNode);
+        }
 
         postRow.scrollIntoView({ block: "start" });
         $.animate({ top: "0px", opacity: "1" }, dialog);
@@ -470,6 +546,29 @@ function initDirectView() {
           kcEl.value = kcaptchaMatch[1];
         }
 
+        // Extract tokens from view page HTML for comment submission
+        const scMatch = html.match(/name="service_code"[^>]*value="([^"]*)"/);
+        const dArgMatch = html.match(/_d\('([^']+)'\)/);
+        const tvch2Match = html.match(/data\('t_vch2',\s*'([^']*)'\)/);
+        const tvch2ChkMatch = html.match(/data\('t_vch2_chk',\s*'([^']*)'\)/);
+
+        // check_6 ~ check_10: server validation tokens
+        const extractHidden = (id) => {
+          const m = html.match(new RegExp("id='" + id + "'[^>]*value='([^']*)'"));
+          return m ? m[1] : "";
+        };
+
+        // Store on dialog for commentViaPageBridge to read
+        dialog.dataset.serviceCode = scMatch ? scMatch[1] : "";
+        dialog.dataset.dArg = dArgMatch ? dArgMatch[1] : "";
+        dialog.dataset.tvch2 = tvch2Match ? tvch2Match[1] : "";
+        dialog.dataset.tvch2Chk = tvch2ChkMatch ? tvch2ChkMatch[1] : "";
+        dialog.dataset.check6 = extractHidden("check_6");
+        dialog.dataset.check7 = extractHidden("check_7");
+        dialog.dataset.check8 = extractHidden("check_8");
+        dialog.dataset.check9 = extractHidden("check_9");
+        dialog.dataset.check10 = extractHidden("check_10");
+
         // Ensure #id input exists (needed by kcaptcha.js)
         if (!document.getElementById("id")) {
           const idInput = document.createElement("input");
@@ -484,7 +583,11 @@ function initDirectView() {
           }));
         };
 
-        if (cmtHtml) dialog.appendChild($.el(cmtHtml));
+        if (cmtHtml) {
+          const cmtNode = $.el(cmtHtml);
+          filterCommentNodes(cmtNode);
+          dialog.appendChild(cmtNode);
+        }
 
         // Load iframe for comment submission (uses server-issued tokens)
         const iframe = $.el(
@@ -531,13 +634,13 @@ function initDirectView() {
         if (replyBtn) {
           replyBtn.classList.remove("repley_add");
           replyBtn.classList.add("dcs_replyButton");
-          replyBtn.addEventListener("click", () => commentViaIframe(dialog));
+          replyBtn.addEventListener("click", () => commentViaPageBridge(dialog));
         }
         const replyBtnVote = $.find(".repley_add_vote", dialog);
         if (replyBtnVote) {
           replyBtnVote.classList.remove("repley_add_vote");
           replyBtnVote.classList.add("dcs_replyButtonVote");
-          replyBtnVote.addEventListener("click", () => commentViaIframe(dialog));
+          replyBtnVote.addEventListener("click", () => commentViaPageBridge(dialog));
         }
 
         // Bug fix 3: Enter key submits comment
@@ -546,7 +649,7 @@ function initDirectView() {
           memoBox.addEventListener("keydown", (e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
-              commentViaIframe(dialog);
+              commentViaPageBridge(dialog);
             }
           });
         }
@@ -594,12 +697,13 @@ function initDirectView() {
 
         triggerViewComments();
         startCommentRefresh();
+        // Re-setup observer after viewComments() populates .comment_box
+        setTimeout(setupCommentObserver, 1000);
 
         for (const img of $.findAll("img[data-original]", dialog)) {
           img.src = img.getAttribute("data-original");
         }
 
-        setTimeout(filterPosts, 300);
       } catch (err) {
         console.error("[dc add-on] Direct view load failed:", err);
       }
@@ -735,7 +839,6 @@ function showDcconOverlay(iframeEl, iframeDivCon, triggerBtn) {
           document.dispatchEvent(new CustomEvent("__dc_addon_viewComments", {
             detail: { refreshOnly: true }
           }));
-          setTimeout(filterComments, 500);
         }, 500);
       }
     } catch {
@@ -794,67 +897,65 @@ function hideDcconOverlay(iframeEl) {
   } catch {}
 }
 
-function commentViaIframe(dialog) {
-  const iframe = $.find("#dcs_iframe", dialog);
-  if (!iframe || !iframe.contentDocument) return;
-
-  const iframeBody = iframe.contentDocument.body;
+/**
+ * Submit comment via MAIN world (page_bridge.js).
+ * MV3 CSP blocks inline scripts in iframes, so iframe tokens never init.
+ * Instead, dispatch event to page_bridge which has access to page-context
+ * tokens (document.service_code, t_vch2, etc.) and uses jQuery.ajax.
+ */
+function commentViaPageBridge(dialog) {
   const textArea = $.find("textarea[id^='memo']", dialog);
   if (!textArea || !textArea.value.trim()) return;
 
-  // Transfer values to iframe inputs
   const no = textArea.id.replace("memo_", "");
+  const hrefUrl = new URL(location.href);
+  const galleryId = hrefUrl.searchParams.get("id");
 
-  // Nickname (갤닉네임 or regular)
-  const gallNick = $.find("input[name='gall_nick_name']", dialog);
   const nameInput = $.find("input[name='name']", dialog);
   const pwInput = $.find("input[name='password']", dialog);
   const codeInput = document.getElementById("code_" + no);
+  const gallNick = $.find("input[name='gall_nick_name']", dialog);
+  const useGallNick = dialog.querySelector("#use_gall_nick") || document.getElementById("use_gall_nick");
 
-  const iGallNick = iframeBody.querySelector("input[name='gall_nick_name']");
-  const iName = iframeBody.querySelector("input[name='name']");
-  const iPw = iframeBody.querySelector("input[name='password']");
-  const iCode = iframeBody.querySelector("#code_" + no);
-  const iMemo = iframeBody.querySelector("#memo_" + no);
-  const iUseGallNick = iframeBody.querySelector("#use_gall_nick");
+  const detail = {
+    id: galleryId,
+    no: no,
+    memo: textArea.value,
+    name: nameInput ? nameInput.value : "",
+    password: pwInput ? pwInput.value : "",
+    code: codeInput ? codeInput.value : "",
+    gall_nick_name: gallNick ? gallNick.value : "",
+    use_gall_nick: useGallNick ? useGallNick.value : "",
+    // Tokens extracted from view page HTML (list page has none)
+    service_code: dialog.dataset.serviceCode || "",
+    d_arg: dialog.dataset.dArg || "",
+    t_vch2: dialog.dataset.tvch2 || "",
+    t_vch2_chk: dialog.dataset.tvch2Chk || "",
+    check_6: dialog.dataset.check6 || "",
+    check_7: dialog.dataset.check7 || "",
+    check_8: dialog.dataset.check8 || "",
+    check_9: dialog.dataset.check9 || "",
+    check_10: dialog.dataset.check10 || "",
+  };
 
-  // Sync use_gall_nick state
-  const useGallNick = document.getElementById("use_gall_nick");
-  if (useGallNick && iUseGallNick) iUseGallNick.value = useGallNick.value;
+  // Listen for result from page_bridge
+  const onResult = (e) => {
+    document.removeEventListener("__dc_addon_commentResult", onResult);
+    const r = e.detail || {};
+    if (r.success) {
+      textArea.value = "";
+      if (codeInput) codeInput.value = "";
+      // Refresh comment list (MutationObserver handles filtering)
+      document.dispatchEvent(new CustomEvent("__dc_addon_viewComments", {
+        detail: { refreshOnly: true }
+      }));
+    } else {
+      console.warn("[dc add-on] comment submit failed:", r.message);
+    }
+  };
+  document.addEventListener("__dc_addon_commentResult", onResult, { once: true });
 
-  if (gallNick && iGallNick) iGallNick.value = gallNick.value;
-  if (nameInput && iName) iName.value = nameInput.value;
-  if (pwInput && iPw) iPw.value = pwInput.value;
-  if (codeInput && iCode) iCode.value = codeInput.value;
-  if (iMemo) iMemo.value = textArea.value;
-
-  // Click iframe's submit button
-  const submitBtn = iframeBody.querySelector(".repley_add[data-no='" + no + "']");
-  if (submitBtn) submitBtn.click();
-
-  // Refresh comments and clear input
-  setTimeout(() => {
-    document.dispatchEvent(new CustomEvent("__dc_addon_viewComments", {
-      detail: { refreshOnly: true }
-    }));
-    textArea.value = "";
-    // Reload captcha for next comment
-    try {
-      const iframeCaptcha = iframeBody.querySelector("img.kcaptcha[data-type='comment']");
-      const dialogCaptcha = $.find("img.kcaptcha[data-type='comment']", dialog);
-      if (iframeCaptcha && dialogCaptcha) {
-        // Trigger iframe captcha reload by clicking it
-        if (iframeCaptcha.click) iframeCaptcha.click();
-        setTimeout(() => {
-          if (iframeCaptcha.src && !iframeCaptcha.src.includes("kcap_none")) {
-            dialogCaptcha.src = iframeCaptcha.src;
-          }
-        }, 500);
-      }
-    } catch {}
-    if (codeInput) codeInput.value = "";
-    setTimeout(filterComments, 500);
-  }, 1000);
+  document.dispatchEvent(new CustomEvent("__dc_addon_commentSubmit", { detail }));
 }
 
 /* ================================================================
@@ -937,7 +1038,13 @@ function initGallReload() {
       );
       if (match) {
         const gallList = $(".gall_list");
-        if (gallList) gallList.innerHTML = match[1];
+        if (gallList) {
+          const tpl = document.createElement("template");
+          tpl.innerHTML = match[1];
+          filterPostNodes(tpl.content);
+          gallList.innerHTML = "";
+          gallList.appendChild(tpl.content);
+        }
       }
 
       // Reset 개념글 and 말머리 tab state
@@ -946,7 +1053,6 @@ function initGallReload() {
       const searchHeadInput = document.getElementById("search_head");
       if (searchHeadInput) searchHeadInput.value = "";
 
-      filterPosts();
       if (dViewMode) initDirectView();
     } catch (err) {
       console.error("[dc add-on] Gallery reload failed:", err);
@@ -963,10 +1069,12 @@ function initGallReload() {
 
 let commentRefreshTimer = null;
 const COMMENT_REFRESH_INTERVAL = 5_000;
+let commentMutationObs = null;
 
 function startCommentRefresh() {
   stopCommentRefresh();
   commentRefreshTimer = setInterval(doCommentRefresh, COMMENT_REFRESH_INTERVAL);
+  setupCommentObserver();
 }
 
 function stopCommentRefresh() {
@@ -974,6 +1082,35 @@ function stopCommentRefresh() {
     clearInterval(commentRefreshTimer);
     commentRefreshTimer = null;
   }
+}
+
+/**
+ * MutationObserver on .comment_box — filters blocked comments immediately
+ * when viewComments() replaces the comment list DOM.
+ */
+function setupCommentObserver() {
+  if (commentMutationObs) commentMutationObs.disconnect();
+
+  const findCommentBox = () => {
+    const container = $("#dcs_dialog") || document;
+    return container.querySelector(".comment_box");
+  };
+
+  const commentBox = findCommentBox();
+  if (!commentBox) return;
+
+  commentMutationObs = new MutationObserver(() => {
+    blockData = loadBlockData();
+    const box = findCommentBox();
+    if (!box) return;
+    for (const li of box.querySelectorAll("li")) {
+      if (li.querySelector(".cmt_info") && isCommentBlocked(li)) {
+        li.style.display = "none";
+      }
+    }
+  });
+
+  commentMutationObs.observe(commentBox, { childList: true, subtree: true });
 }
 
 function doCommentRefresh() {
@@ -997,7 +1134,8 @@ function doCommentRefresh() {
     detail: { refreshOnly: true }
   }));
 
-  setTimeout(filterComments, 500);
+  // MutationObserver handles filtering — re-setup in case .comment_box was replaced
+  setupCommentObserver();
 }
 
 /* ================================================================
@@ -1071,6 +1209,7 @@ async function doAutoRefresh() {
     tpl.innerHTML = html;
     const fetchedRows = tpl.content.querySelectorAll(".gall_list .ub-content.us-post");
 
+    blockData = loadBlockData();
     const newRows = [];
     for (const row of fetchedRows) {
       if (isNotice(row)) continue;
@@ -1078,8 +1217,8 @@ async function doAutoRefresh() {
       if (!no) continue;
 
       if (!existingMap.has(no)) {
-        // New post
-        newRows.push(row);
+        // New post — skip if blocked
+        if (!isPostBlocked(row)) newRows.push(row);
       } else {
         // Existing post — check for comment count change
         const existingRow = existingMap.get(no);
@@ -1138,7 +1277,6 @@ async function doAutoRefresh() {
       }
     }
 
-    filterPosts();
     if (dViewMode) initDirectView();
   } catch {
     // Silently ignore fetch errors
