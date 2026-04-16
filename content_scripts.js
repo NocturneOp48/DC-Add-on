@@ -138,7 +138,7 @@ function filterComments() {
   const ipPrefixes = blockData.ips;
   const keywords = blockData.keywords;
 
-  for (const cmt of $.all(".cmt_info")) {
+  for (const cmt of $.all(".cmt_info, .reply_info")) {
     const li = cmt.closest("li");
     if (!li) continue;
 
@@ -185,11 +185,11 @@ function isPostBlocked(row) {
 }
 
 /**
- * Check if a single comment (li containing .cmt_info) should be blocked.
+ * Check if a single comment (li containing .cmt_info or .reply_info) should be blocked.
  * Works on detached DOM nodes (before insertion).
  */
 function isCommentBlocked(li) {
-  const cmt = li.querySelector(".cmt_info");
+  const cmt = li.querySelector(".cmt_info, .reply_info");
   if (!cmt) return false;
 
   const writer = cmt.querySelector(".ub-writer");
@@ -228,7 +228,7 @@ function filterPostNodes(container) {
 function filterCommentNodes(container) {
   blockData = loadBlockData();
   for (const li of container.querySelectorAll("li")) {
-    if (li.querySelector(".cmt_info") && isCommentBlocked(li)) li.remove();
+    if (li.querySelector(".cmt_info, .reply_info") && isCommentBlocked(li)) li.remove();
   }
 }
 
@@ -1104,7 +1104,7 @@ function setupCommentObserver() {
     const box = findCommentBox();
     if (!box) return;
     for (const li of box.querySelectorAll("li")) {
-      if (li.querySelector(".cmt_info") && isCommentBlocked(li)) {
+      if (li.querySelector(".cmt_info, .reply_info") && isCommentBlocked(li)) {
         li.style.display = "none";
       }
     }
