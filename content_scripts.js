@@ -1251,6 +1251,15 @@ async function doAutoRefresh() {
             });
           }
         }
+
+        // Update view count and recommend count (no highlight)
+        for (const sel of [".gall_count", ".gall_recommend"]) {
+          const oldCell = existingRow.querySelector(sel);
+          const newCell = row.querySelector(sel);
+          if (oldCell && newCell && oldCell.textContent !== newCell.textContent) {
+            oldCell.textContent = newCell.textContent;
+          }
+        }
       }
     }
 
