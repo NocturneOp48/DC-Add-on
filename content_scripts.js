@@ -1273,6 +1273,10 @@ async function doAutoRefresh() {
         }
       }
       if (insertBefore) {
+        const scrollEl = document.scrollingElement || document.documentElement;
+        const preserveScroll = scrollEl.scrollTop > 0;
+        const heightBefore = scrollEl.scrollHeight;
+
         for (const row of newRows.reverse()) {
           row.style.backgroundColor = "var(--dc-muted, #f4f4f5)";
           row.style.transition = "background-color 5s ease";
@@ -1282,6 +1286,11 @@ async function doAutoRefresh() {
               row.style.backgroundColor = "";
             });
           });
+        }
+
+        if (preserveScroll) {
+          const delta = scrollEl.scrollHeight - heightBefore;
+          if (delta > 0) scrollEl.scrollTop += delta;
         }
       }
     }
