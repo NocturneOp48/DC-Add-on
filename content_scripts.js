@@ -1085,32 +1085,31 @@ function stopCommentRefresh() {
 }
 
 /**
- * MutationObserver on .comment_box — filters blocked comments immediately
- * when viewComments() replaces the comment list DOM.
+ * MutationObserver on the parent of .comment_box — filters blocked comments
+ * immediately, and survives viewComments() replacing .comment_box wholesale.
  */
 function setupCommentObserver() {
   if (commentMutationObs) commentMutationObs.disconnect();
 
-  const findCommentBox = () => {
-    const container = $("#dcs_dialog") || document;
-    return container.querySelector(".comment_box");
-  };
+  const container = $("#dcs_dialog") || document;
+  const commentBox = container.querySelector(".comment_box");
+  const parent = commentBox ? commentBox.parentElement : null;
+  if (!parent) return;
 
-  const commentBox = findCommentBox();
-  if (!commentBox) return;
-
-  commentMutationObs = new MutationObserver(() => {
+  const applyFilter = () => {
     blockData = loadBlockData();
-    const box = findCommentBox();
+    const box = parent.querySelector(".comment_box");
     if (!box) return;
     for (const li of box.querySelectorAll("li")) {
       if (li.querySelector(".cmt_info, .reply_info") && isCommentBlocked(li)) {
         li.style.display = "none";
       }
     }
-  });
+  };
 
-  commentMutationObs.observe(commentBox, { childList: true, subtree: true });
+  applyFilter();
+  commentMutationObs = new MutationObserver(applyFilter);
+  commentMutationObs.observe(parent, { childList: true, subtree: true });
 }
 
 function doCommentRefresh() {
@@ -1133,9 +1132,8 @@ function doCommentRefresh() {
   document.dispatchEvent(new CustomEvent("__dc_addon_viewComments", {
     detail: { refreshOnly: true }
   }));
-
-  // MutationObserver handles filtering — re-setup in case .comment_box was replaced
-  setupCommentObserver();
+  // Observer is on .comment_box's parent, so it survives the replacement —
+  // no re-setup needed here.
 }
 
 /* ================================================================

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "dc add-on",
-  "version": "3.0.4",
+  "version": "3.0.5",
   "description": "갤질용 편의기능 제공",
   "action": {
     "default_icon": {
